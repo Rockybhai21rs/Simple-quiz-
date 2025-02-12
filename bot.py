@@ -1,10 +1,23 @@
 import os
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, CallbackContext, CallbackQueryHandler
+from telegram import Update
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, CallbackContext
 from dotenv import load_dotenv
+from http.server import BaseHTTPRequestHandler, HTTPServer
+import threading
 
 # Load environment variables
 load_dotenv()
+
+# Dummy HTTP server
+class DummyServer(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is running!")
+
+def run_server():
+    server = HTTPServer(("0.0.0.0", 8080), DummyServer)
+    server.serve_forever()
 
 # Quiz data storage (in-memory for simplicity)
 quizzes = {}
@@ -68,6 +81,12 @@ def main():
     if not token:
         raise ValueError("TELEGRAM_BOT_TOKEN not found in environment variables.")
 
+    # Start the dummy HTTP server in a separate thread
+    server_thread = threading.Thread(target=run_server)
+    server_thread.daemon = True
+    server_thread.start()
+
+    # Start the bot
     app = ApplicationBuilder().token(token).build()
 
     app.add_handler(CommandHandler("start", start))

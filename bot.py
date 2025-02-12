@@ -1,51 +1,66 @@
 import os
-from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, CallbackContext
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, CallbackContext, CallbackQueryHandler
 from dotenv import load_dotenv
 
 # Load environment variables
 load_dotenv()
 
-# Quiz data
-QUIZ = [
-    {"question": "What is the capital of France?", "answer": "Paris"},
-    {"question": "What is 2 + 2?", "answer": "4"},
-    {"question": "What is the largest planet in the solar system?", "answer": "Jupiter"},
-]
+# Quiz data storage (in-memory for simplicity)
+quizzes = {}
 
 # Start command
 async def start(update: Update, context: CallbackContext):
-    await update.message.reply_text("Welcome to the Quiz Bot! Type /quiz to start.")
+    await update.message.reply_text(
+        "Welcome to Quiz Bot! Use /create to start creating a quiz."
+    )
 
-# Quiz command
-async def quiz(update: Update, context: CallbackContext):
-    context.user_data["score"] = 0
-    context.user_data["current_question"] = 0
-    await ask_question(update, context)
+# Create quiz command
+async def create_quiz(update: Update, context: CallbackContext):
+    await update.message.reply_text(
+        "Let's create a new quiz. First, send me the title of your quiz (e.g., 'Aptitude Test')."
+    )
+    context.user_data["step"] = "title"
 
-# Ask a question
-async def ask_question(update: Update, context: CallbackContext):
-    current_question = context.user_data["current_question"]
-    if current_question < len(QUIZ):
-        question = QUIZ[current_question]["question"]
-        await update.message.reply_text(f"Question {current_question + 1}: {question}")
-    else:
-        await update.message.reply_text(f"Quiz over! Your score is {context.user_data['score']}/{len(QUIZ)}")
+# Handle quiz creation steps
+async def handle_message(update: Update, context: CallbackContext):
+    step = context.user_data.get("step")
+    user_id = update.message.from_user.id
 
-# Handle user answers
-async def handle_answer(update: Update, context: CallbackContext):
-    current_question = context.user_data["current_question"]
-    user_answer = update.message.text.strip()
-    correct_answer = QUIZ[current_question]["answer"]
+    if step == "title":
+        context.user_data["title"] = update.message.text
+        await update.message.reply_text(
+            "Great! Now send me a description of your quiz (or /skip to skip this step)."
+        )
+        context.user_data["step"] = "description"
 
-    if user_answer.lower() == correct_answer.lower():
-        context.user_data["score"] += 1
-        await update.message.reply_text("Correct!")
-    else:
-        await update.message.reply_text(f"Wrong! The correct answer is {correct_answer}.")
+    elif step == "description":
+        if update.message.text.lower() != "/skip":
+            context.user_data["description"] = update.message.text
+        await update.message.reply_text(
+            "Now send me your first question (e.g., 'What is CPU?')."
+        )
+        context.user_data["step"] = "question"
 
-    context.user_data["current_question"] += 1
-    await ask_question(update, context)
+    elif step == "question":
+        question = update.message.text
+        quizzes[user_id] = {"title": context.user_data["title"], "description": context.user_data.get("description"), "questions": [question]}
+        await update.message.reply_text(
+            f"Question added: {question}\nUse /add to add more questions or /finish to complete the quiz."
+        )
+        context.user_data["step"] = "add_questions"
+
+    elif step == "add_questions":
+        if update.message.text.lower() == "/finish":
+            await update.message.reply_text(
+                f"Quiz created successfully!\nTitle: {context.user_data['title']}\nDescription: {context.user_data.get('description', 'No description')}\nQuestions: {len(quizzes[user_id]['questions'])}"
+            )
+            context.user_data.clear()
+        else:
+            quizzes[user_id]["questions"].append(update.message.text)
+            await update.message.reply_text(
+                f"Question added: {update.message.text}\nUse /add to add more questions or /finish to complete the quiz."
+            )
 
 # Main function
 def main():
@@ -56,8 +71,8 @@ def main():
     app = ApplicationBuilder().token(token).build()
 
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("quiz", quiz))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_answer))
+    app.add_handler(CommandHandler("create", create_quiz))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     app.run_polling()
 

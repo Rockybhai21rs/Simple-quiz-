@@ -32,6 +32,69 @@ def run_server():
 
 # Quiz data storage (in-memory for simplicity)
 quizzes = {}
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+# Create a multiple-choice question
+async def create_multiple_choice(update: Update, context: CallbackContext):
+    question = "What is the capital of France?"
+    options = [
+        [InlineKeyboardButton("Paris", callback_data="correct")],
+        [InlineKeyboardButton("London", callback_data="incorrect")],
+        [InlineKeyboardButton("Berlin", callback_data="incorrect")],
+    ]
+    reply_markup = InlineKeyboardMarkup(options)
+    await update.message.reply_text(question, reply_markup=reply_markup)
+
+# Handle user selection
+async def handle_selection(update: Update, context: CallbackContext):
+    query = update.callback_query
+    await query.answer()
+    if query.data == "correct":
+        await query.edit_message_text("Correct!")
+    else:
+        await query.edit_message_text("Incorrect!")
+
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters
+from telegram.ext import CallbackContext, Application
+
+# Add rate limiting
+async def start(update: Update, context: CallbackContext):
+    user_id = update.message.from_user.id
+    if context.user_data.get(user_id, 0) > 5:  # Allow only 5 requests per user
+        await update.message.reply_text("Rate limit exceeded. Please try again later.")
+        return
+    context.user_data[user_id] = context.user_data.get(user_id, 0) + 1
+    await update.message.reply_text("Welcome to the bot!")
+
+# Example translations
+translations = {
+    "en": {"welcome": "Welcome!"},
+    "es": {"welcome": "¡Bienvenido!"},
+}
+
+async def start(update: Update, context: CallbackContext):
+    user_language = "en"  # Detect user language
+    welcome_message = translations[user_language]["welcome"]
+    await update.message.reply_text(welcome_message)
+
+# Track user scores
+user_scores = {}
+
+async def handle_answer(update: Update, context: CallbackContext):
+    user_id = update.message.from_user.id
+    correct_answer = context.user_data["current_question"]["answer"]
+    user_answer = update.message.text
+
+    if user_answer.lower() == correct_answer.lower():
+        user_scores[user_id] = user_scores.get(user_id, 0) + 1
+
+    # Move to the next question or end the quiz
+    await next_question_or_end(update, context)
+
+async def end_quiz(update: Update, context: CallbackContext):
+    user_id = update.message.from_user.id
+    score = user_scores.get(user_id, 0)
+    await update.message.reply_text(f"Quiz over! Your score is {score}/{len(quiz_questions)}")
 
 # Start command
 async def start(update: Update, context: CallbackContext):

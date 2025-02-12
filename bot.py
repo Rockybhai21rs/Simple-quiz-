@@ -4,6 +4,17 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, fil
 from dotenv import load_dotenv
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import threading
+import uuid
+
+# Generate a unique quiz ID
+def generate_quiz_id():
+    return str(uuid.uuid4())
+
+# Share quiz command
+async def share_quiz(update: Update, context: CallbackContext):
+    quiz_id = generate_quiz_id()
+    quiz_link = f"https://t.me/your_bot_username?start=quiz_{quiz_id}"
+    await update.message.reply_text(f"Share this link to invite others to take the quiz: {quiz_link}")
 
 # Load environment variables
 load_dotenv()
